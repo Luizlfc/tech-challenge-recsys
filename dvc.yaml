@@ -1,0 +1,62 @@
+stages:
+  preprocess:
+    cmd: python -m recsys.pipeline.preprocess
+    deps:
+      - src/recsys/pipeline/preprocess.py
+      - data/raw/ml-latest-small/ratings.csv
+    params:
+      - seed
+      - preprocess
+    outs:
+      - data/processed/interactions.parquet
+
+  feature_eng:
+    cmd: python -m recsys.pipeline.feature_eng
+    deps:
+      - src/recsys/pipeline/feature_eng.py
+      - data/processed/interactions.parquet
+    params:
+      - seed
+      - feature_eng
+    outs:
+      - data/features/train.parquet
+      - data/features/val.parquet
+      - data/features/test.parquet
+      - data/features/popularity.parquet
+      - data/features/user_id_map.json
+      - data/features/item_id_map.json
+
+  train:
+    cmd: python -m recsys.pipeline.train
+    deps:
+      - src/recsys/pipeline/train.py
+      - src/recsys/models
+      - src/recsys/training
+      - data/features/train.parquet
+      - data/features/val.parquet
+    params:
+      - seed
+      - train
+      - evaluate.k_values
+    outs:
+      - models/baselines/popularity.pkl
+      - models/baselines/item_knn.pkl
+      - models/baselines/svd.pkl
+      - models/mlp/model.pt
+      - models/trained_models.json
+
+  evaluate:
+    cmd: python -m recsys.pipeline.evaluate
+    deps:
+      - src/recsys/pipeline/evaluate.py
+      - src/recsys/evaluation
+      - data/features/test.parquet
+      - models/trained_models.json
+    params:
+      - seed
+      - evaluate
+    metrics:
+      - metrics/eval_metrics.json:
+          cache: false
+    outs:
+      - metrics/eval_table.csv

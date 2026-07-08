@@ -1,0 +1,32 @@
+seed: 42
+
+preprocess:
+  min_interactions_per_user: 5
+  rating_threshold: 4.0
+
+feature_eng:
+  negative_ratio: 4
+  seed: 42
+
+train:
+  models_to_run: ["popularity", "item_knn", "svd", "mlp"]
+  mlp:
+    embedding_dim: 32
+    hidden_layers: [128, 64, 32]
+    dropout: 0.2
+    lr: 0.001
+    batch_size: 256
+    epochs: 20
+    weight_decay: 0.0
+    early_stopping_patience: 3
+  baselines:
+    knn:
+      n_neighbors: 20
+      metric: cosine
+    svd:
+      n_components: 50
+
+evaluate:
+  k_values: [5, 10, 20]
+  promotion_metric: "ndcg@10"
+  promotion_threshold: 0.03

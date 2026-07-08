@@ -1,0 +1,182 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: python -m recsys.pipeline.preprocess
+    deps:
+    - path: data/raw/ml-latest-small/ratings.csv
+      hash: md5
+      md5: 325a6f09399d1c45671f187505e1a100
+      size: 2483723
+    - path: src/recsys/pipeline/preprocess.py
+      hash: md5
+      md5: 08237eaf79d8226f43e09be8be0b9716
+      size: 2540
+    params:
+      params.yaml:
+        preprocess:
+          min_interactions_per_user: 5
+          rating_threshold: 4.0
+        seed: 42
+    outs:
+    - path: data/processed/interactions.parquet
+      hash: md5
+      md5: cae8ce98d78696cb870c1f235de31e6a
+      size: 310970
+  feature_eng:
+    cmd: python -m recsys.pipeline.feature_eng
+    deps:
+    - path: data/processed/interactions.parquet
+      hash: md5
+      md5: cae8ce98d78696cb870c1f235de31e6a
+      size: 310970
+    - path: src/recsys/pipeline/feature_eng.py
+      hash: md5
+      md5: 267d401e29df00ea6f80d704e2a225dc
+      size: 4526
+    params:
+      params.yaml:
+        feature_eng:
+          negative_ratio: 4
+          seed: 42
+        seed: 42
+    outs:
+    - path: data/features/item_id_map.json
+      hash: md5
+      md5: 52de942da01fe010a2f07e025b490173
+      size: 32360
+    - path: data/features/popularity.parquet
+      hash: md5
+      md5: f69d2f17e60271156d9118aad7806f5c
+      size: 14483
+    - path: data/features/test.parquet
+      hash: md5
+      md5: a772e2d956265bcb84b15291a862a468
+      size: 8002
+    - path: data/features/train.parquet
+      hash: md5
+      md5: 52849ed8eff1151a7bf6e7509b0b41a8
+      size: 568807
+    - path: data/features/user_id_map.json
+      hash: md5
+      md5: 6d5a5641e427438c36cbc62de51af0e9
+      size: 8803
+    - path: data/features/val.parquet
+      hash: md5
+      md5: 6b6bd04144c593f375a89661cc5992db
+      size: 19136
+  train:
+    cmd: python -m recsys.pipeline.train
+    deps:
+    - path: data/features/train.parquet
+      hash: md5
+      md5: 52849ed8eff1151a7bf6e7509b0b41a8
+      size: 568807
+    - path: data/features/val.parquet
+      hash: md5
+      md5: 6b6bd04144c593f375a89661cc5992db
+      size: 19136
+    - path: src/recsys/models
+      hash: md5
+      md5: dcabc12e2211e707a9f7340e02062c05.dir
+      size: 43286
+      nfiles: 16
+    - path: src/recsys/pipeline/train.py
+      hash: md5
+      md5: f8f1997e5f6bb1e708ec68f5df29216d
+      size: 3258
+    - path: src/recsys/training
+      hash: md5
+      md5: 025b8cb3c98417ccbd7dc9f019a239ca.dir
+      size: 4558
+      nfiles: 4
+    params:
+      params.yaml:
+        evaluate.k_values:
+        - 5
+        - 10
+        - 20
+        seed: 42
+        train:
+          models_to_run:
+          - popularity
+          - item_knn
+          - svd
+          - mlp
+          mlp:
+            embedding_dim: 32
+            hidden_layers:
+            - 128
+            - 64
+            - 32
+            dropout: 0.2
+            lr: 0.001
+            batch_size: 256
+            epochs: 20
+            weight_decay: 0.0
+            early_stopping_patience: 3
+          baselines:
+            knn:
+              n_neighbors: 20
+              metric: cosine
+            svd:
+              n_components: 50
+    outs:
+    - path: models/baselines/item_knn.pkl
+      hash: md5
+      md5: eac312d56da124d2579873c906998a87
+      size: 960859
+    - path: models/baselines/popularity.pkl
+      hash: md5
+      md5: 17d8f75d094f9057ca0d18f8d601d9d4
+      size: 15922
+    - path: models/baselines/svd.pkl
+      hash: md5
+      md5: 285eabfe724bccefe48355e6b5b632b4
+      size: 1023170
+    - path: models/mlp/model.pt
+      hash: md5
+      md5: ad45c170a5e82e982901d0411b64158c
+      size: 405861
+    - path: models/trained_models.json
+      hash: md5
+      md5: 496a52e3eff3848ebb27ead132dd8afa
+      size: 182
+  evaluate:
+    cmd: python -m recsys.pipeline.evaluate
+    deps:
+    - path: data/features/test.parquet
+      hash: md5
+      md5: a772e2d956265bcb84b15291a862a468
+      size: 8002
+    - path: models/trained_models.json
+      hash: md5
+      md5: 496a52e3eff3848ebb27ead132dd8afa
+      size: 182
+    - path: src/recsys/evaluation
+      hash: md5
+      md5: c2f0767bb5802569516d916213d3f084.dir
+      size: 8422
+      nfiles: 6
+    - path: src/recsys/pipeline/evaluate.py
+      hash: md5
+      md5: c27d67d4c521d33116fe584cf1c78375
+      size: 4344
+    params:
+      params.yaml:
+        evaluate:
+          k_values:
+          - 5
+          - 10
+          - 20
+          promotion_metric: ndcg@10
+          promotion_threshold: 0.03
+        seed: 42
+    outs:
+    - path: metrics/eval_metrics.json
+      hash: md5
+      md5: b8d4ba197cc1a3e45a0da97042425099
+      size: 2436
+    - path: metrics/eval_table.csv
+      hash: md5
+      md5: b2ccc488aff4d4906d68b058aceaf858
+      size: 1412

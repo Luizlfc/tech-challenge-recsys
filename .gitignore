@@ -1,0 +1,50 @@
+# Ambiente virtual
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Dados (versionados via DVC, nao Git)
+/data/raw/*
+/data/processed/*
+/data/features/*
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/data/features/.gitkeep
+
+# Modelos (versionados via DVC, nao Git)
+/models/mlp/*
+/models/baselines/*
+!/models/mlp/.gitkeep
+!/models/baselines/.gitkeep
+
+# DVC cache local
+/.dvc/cache/
+/.dvc/tmp/
+
+# MLflow local
+mlruns/
+mlartifacts/
+mlflow.db
+
+# Env
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pytest / ruff cache
+.pytest_cache/
+.ruff_cache/

@@ -146,6 +146,7 @@ vieses em [docs/model_card.md](docs/model_card.md).
 
 ## Documentacao
 - [Model Card](docs/model_card.md)
+- [Roteiro do Vídeo STAR](docs/video_script.md)
 
 ## Autor
 Luiz Carvalho

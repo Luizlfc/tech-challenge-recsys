@@ -28,7 +28,8 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv ./.venv
 COPY src ./src
-COPY params.yaml dvc.yaml ./
+COPY params.yaml dvc.yaml .dvcignore ./
+COPY .dvc ./.dvc
 COPY scripts ./scripts
 
 ENV PATH="/app/.venv/bin:${PATH}" \

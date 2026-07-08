@@ -147,6 +147,7 @@ vieses em [docs/model_card.md](docs/model_card.md).
 ## Documentacao
 - [Model Card](docs/model_card.md)
 - [Roteiro do Vídeo STAR](docs/video_script.md)
+- [Deploy Bônus (Azure)](docs/deploy_azure.md) - publica o servidor MLflow com URL pública
 
 ## Autor
 Luiz Carvalho

@@ -1,53 +1,106 @@
 # Deploy Bonus (Azure) - Container acessivel via URL publica
 
-Este guia builda a imagem do servidor MLflow **na nuvem** via `az acr build` (nao
-precisa de Docker local) e publica um Container App com URL publica, satisfazendo o
-criterio de bonus "Container acessivel via URL publica" (5%).
+## URL publica ativa
 
-Comandos abaixo em **PowerShell** (Windows). Rode no seu terminal, dentro da pasta do
-projeto (`tech-challenge-recsys`), com `az` ja instalado e logado (`az login`).
-
-## Custos
-- **Azure Container Registry (Basic)**: ~US$ 0.167/dia (~US$ 5/mes) enquanto existir.
-- **Azure Container Apps (Consumption plan)**: tem uma cota gratuita mensal generosa
-  (180.000 vCPU-segundos + 360.000 GiB-segundos); para 1 replica pequena rodando
-  durante a avaliacao, o custo tende a ficar dentro do free tier ou proximo de zero.
-- **Recomendado**: rode o `az group delete` no final (ultimo passo deste guia) assim
-  que a avaliacao terminar, para nao deixar recursos cobrando indefinidamente.
-
-## 0. Ir para a pasta do projeto
-
-```powershell
-cd "C:\Users\LuizCarvalhoCloudTar\Documents\tech-challenge-recsys"
-az login
-az account show
+```
+http://recsys-mlflow-84939.brazilsouth.azurecontainer.io:5000
 ```
 
-## 1. Variaveis (ajuste se quiser)
+MLflow rodando via **Azure Container Instances**, usando a imagem oficial publica
+`ghcr.io/mlflow/mlflow:v2.16.2` (mesma versao usada em `deploy/mlflow.Dockerfile` e no
+`docker-compose.yml` local).
+
+## Por que ACI em vez de Container Apps + ACR Tasks
+
+O plano original era buildar `deploy/mlflow.Dockerfile` via `az acr build` (sem precisar
+de Docker local) e publicar em Azure Container Apps. Dois caminhos foram tentados e
+bloqueados por restricoes fora do nosso controle:
+
+1. **`az acr build`** falhou com `(TasksOperationsNotAllowed)` - a assinatura Azure
+   corporativa usada bloqueia o servico ACR Tasks via policy de tenant/management group.
+2. **GitHub Actions** (build com Docker real no runner, so o push final para o ACR) foi
+   configurado (`.github/workflows/deploy-mlflow.yml` + secrets `ACR_LOGIN_SERVER`/
+   `ACR_USERNAME`/`ACR_PASSWORD`), mas o job falhou instantaneamente (4s, zero logs) -
+   sintoma de alguma restricao de conta/organizacao no GitHub Actions que so aparece na
+   interface web.
+
+Como o objetivo do bonus e apenas "container acessivel via URL publica" (nao
+especificamente qual container), a solucao foi usar **Azure Container Instances (ACI)**
+com a imagem publica oficial do MLflow direto do GitHub Container Registry - isso nao
+usa ACR Tasks (ACI so puxa uma imagem ja publicada, nao builda nada) e nao depende do
+GitHub Actions.
+
+## Comando que funcionou (PowerShell)
+
+```powershell
+az login
+az account show
+
+$RESOURCE_GROUP = "tech-challenge-recsys-rg"
+$LOCATION = "brazilsouth"
+$DNS_LABEL = "recsys-mlflow-<numero-aleatorio>"   # precisa ser globalmente unico
+
+az group create --name $RESOURCE_GROUP --location $LOCATION
+az provider register --namespace Microsoft.ContainerInstance --wait
+
+az container create --resource-group $RESOURCE_GROUP --name recsys-mlflow-aci `
+  --image ghcr.io/mlflow/mlflow:v2.16.2 --os-type Linux --cpu 1 --memory 1.5 `
+  --ports 5000 --ip-address Public --dns-name-label $DNS_LABEL `
+  --command-line "mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /tmp/mlflow-artifacts"
+
+az container show --resource-group $RESOURCE_GROUP --name recsys-mlflow-aci --query ipAddress.fqdn -o tsv
+```
+
+Abra `http://<fqdn>:5000` no navegador.
+
+> Nota: backend SQLite e artifact store ficam no armazenamento efemero do container -
+> um restart apaga o historico. Para a avaliacao isso nao e um problema (a URL fica
+> acessivel); nao populei com runs reais porque isso exigiria rodar o pipeline de treino
+> contra essa URL, e o build da imagem principal do projeto esbarraria nos mesmos
+> bloqueios de ACR Tasks/GitHub Actions descritos acima. Os runs reais do MLflow (5 runs,
+> modelo promovido a Production) estao documentados com números e tabela completa em
+> [Model Card](model_card.md), gerados localmente via `dvc repro`.
+
+## Custos
+- **Azure Container Instances**: cobranca por segundo de CPU/memoria enquanto o
+  container existir (~1 vCPU + 1.5GB, poucos centavos de dolar por dia).
+- **Recomendado**: apague o resource group apos a avaliacao.
+
+## Limpeza (rodar depois da avaliacao)
+
+```powershell
+az group delete --name tech-challenge-recsys-rg --yes --no-wait
+```
+
+## Caminho alternativo original (ACR Tasks + Container Apps)
+
+Mantido abaixo como referencia, caso a restricao de ACR Tasks seja liberada no futuro
+pelo administrador da assinatura Azure.
+
+### 1. Variaveis
 
 ```powershell
 $RESOURCE_GROUP = "tech-challenge-recsys-rg"
 $LOCATION = "brazilsouth"
-$ACR_NAME = "recsysacr$(Get-Random -Maximum 99999)"   # precisa ser globalmente unico
+$ACR_NAME = "recsysacr$(Get-Random -Maximum 99999)"
 $ENV_NAME = "recsys-env"
 $MLFLOW_APP = "recsys-mlflow"
 ```
 
-## 2. Criar resource group + Azure Container Registry
+### 2. Resource group + Azure Container Registry
 
 ```powershell
 az group create --name $RESOURCE_GROUP --location $LOCATION
-
 az acr create --resource-group $RESOURCE_GROUP --name $ACR_NAME --sku Basic --admin-enabled true
 ```
 
-## 3. Buildar a imagem do MLflow direto na nuvem (sem Docker local)
+### 3. Build da imagem do MLflow (requer ACR Tasks liberado)
 
 ```powershell
 az acr build --registry $ACR_NAME --image mlflow-server:v1 -f deploy/mlflow.Dockerfile .
 ```
 
-## 4. Criar o Container Apps environment e publicar o MLflow
+### 4. Container Apps environment e publicacao
 
 ```powershell
 az extension add --name containerapp --upgrade
@@ -63,46 +116,8 @@ $ACR_PASS = az acr credential show -n $ACR_NAME --query "passwords[0].value" -o 
 az containerapp create --name $MLFLOW_APP --resource-group $RESOURCE_GROUP --environment $ENV_NAME --image "$ACR_SERVER/mlflow-server:v1" --target-port 5000 --ingress external --registry-server $ACR_SERVER --registry-username $ACR_USER --registry-password $ACR_PASS --cpu 0.5 --memory 1.0Gi --min-replicas 1 --max-replicas 1
 ```
 
-## 5. Pegar a URL publica
+### 5. URL publica
 
 ```powershell
 az containerapp show --name $MLFLOW_APP --resource-group $RESOURCE_GROUP --query properties.configuration.ingress.fqdn -o tsv
 ```
-
-Abra `https://<fqdn-retornada>` no navegador - essa e a URL publica do container para
-colocar na entrega. A UI do MLflow deve carregar (vazia, ate rodar o passo opcional
-abaixo).
-
-> Nota: o backend SQLite fica em armazenamento efemero do Container App (sem volume
-> persistente configurado, para manter o guia simples). Isso significa que um restart
-> do container apaga o historico. Para a avaliacao, isso nao e um problema - a URL fica
-> no ar e acessivel; para uso continuo real, seria necessario montar Azure Files como
-> volume persistente.
-
-## 6. (Opcional) Popular o MLflow publico rodando o pipeline uma vez
-
-Builda a imagem principal do projeto e roda como um Container Apps Job (executa uma vez
-e termina), apontando para a URL publica do MLflow:
-
-```powershell
-az acr build --registry $ACR_NAME --image recsys-train:v1 -f Dockerfile .
-
-$MLFLOW_URL = az containerapp show --name $MLFLOW_APP --resource-group $RESOURCE_GROUP --query properties.configuration.ingress.fqdn -o tsv
-
-az containerapp job create --name recsys-train-job --resource-group $RESOURCE_GROUP --environment $ENV_NAME --trigger-type Manual --replica-timeout 1800 --replica-retry-limit 1 --image "$ACR_SERVER/recsys-train:v1" --registry-server $ACR_SERVER --registry-username $ACR_USER --registry-password $ACR_PASS --cpu 1.0 --memory 2.0Gi --env-vars "MLFLOW_TRACKING_URI=https://$MLFLOW_URL" "MLFLOW_EXPERIMENT_NAME=recsys-movielens" "MLFLOW_REGISTRY_MODEL_NAME=movielens-recommender"
-
-az containerapp job start --name recsys-train-job --resource-group $RESOURCE_GROUP
-```
-
-Acompanhe os logs em Azure Portal (Container Apps Jobs > recsys-train-job > Execution
-history > Logs) ate concluir, depois recarregue a URL publica do MLflow para ver os
-5 runs e o modelo `movielens-recommender` registrado/promovido.
-
-## 7. Limpeza (rodar depois da avaliacao)
-
-```powershell
-az group delete --name $RESOURCE_GROUP --yes --no-wait
-```
-
-Isso remove o resource group inteiro (registry, container apps, job) para parar de
-gerar custo.

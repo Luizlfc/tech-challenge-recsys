@@ -144,6 +144,13 @@ vieses em [docs/model_card.md](docs/model_card.md).
 - **Docker** - containerizacao multi-stage
 - **Pytest / Ruff** - testes e linting
 
+## Deploy em Nuvem (Bônus)
+
+MLflow publicado no Azure, acessível em:
+**http://recsys-mlflow-84939.brazilsouth.azurecontainer.io:5000**
+
+Detalhes de como foi feito (e os bloqueios contornados) em [docs/deploy_azure.md](docs/deploy_azure.md).
+
 ## Documentacao
 - [Model Card](docs/model_card.md)
 - [Roteiro do Vídeo STAR](docs/video_script.md)
